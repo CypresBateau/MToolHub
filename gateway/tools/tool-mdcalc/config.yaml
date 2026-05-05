@@ -1,0 +1,9 @@
+name: tool-mdcalc
+type: remote
+endpoint: http://tool-mdcalc:8000
+gpu_memory_mb: 0
+load_time_s: 10
+call_timeout_s: 15
+description: "871 个 MDCalc 医疗计算器（ANC、Wells Score、SOFA 等），覆盖急诊/心内/肾内/神经等科室，JSON 参数输入，返回评分+风险分级+临床建议"
+input: json
+output: dict

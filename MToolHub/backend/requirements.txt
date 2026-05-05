@@ -1,0 +1,29 @@
+# Python 依赖包
+
+# FastAPI 框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# 数据验证
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# HTTP 客户端
+httpx>=0.25.0
+
+# Claude API
+anthropic>=0.39.0
+
+# 向量检索
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+numpy>=1.24.0
+
+# 工具
+python-dotenv>=1.0.0
+
+# 测试
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0

@@ -1,0 +1,28 @@
+{
+  "models": [
+    {
+      "id": "model_mavl_chest_xray",
+      "name": "MAVL Chest X-Ray Analysis",
+      "name_zh": "MAVL 胸部 X 光分析",
+      "category": "model",
+      "sub_category": "image_analysis",
+      "gateway_tool_name": "mavl",
+      "gateway_interface": "predict",
+      "description": "Analyzes chest X-ray images to detect 75 types of thoracic findings including pneumonia, pleural effusion, cardiomegaly, pneumothorax, atelectasis, consolidation, edema, nodule, mass, and fracture using deep learning.",
+      "description_zh": "使用深度学习分析胸部 X 光片，检测 75 种胸部病变，包括肺炎、胸腔积液、心脏扩大、气胸、肺不张、实变、水肿、结节、肿块和骨折。",
+      "keywords": ["chest xray", "CXR", "pneumonia", "pleural effusion", "pneumothorax", "胸片", "肺炎", "胸腔积液", "气胸"],
+      "input_type": "image",
+      "accepted_formats": ["image/png", "image/jpeg", "image/jpg", "image/dicom"],
+      "output_format": "label_probability_list",
+      "parameters": {
+        "top_k": {
+          "type": "integer",
+          "default": 5,
+          "description": "Number of top predictions to return"
+        }
+      },
+      "tags": ["radiology", "imaging", "deep-learning", "chest"],
+      "enabled": true
+    }
+  ]
+}

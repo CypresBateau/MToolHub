@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # MToolHub 后端服务
+  mtoolhub:
+    build:
+      context: ./MToolHub/backend
+      dockerfile: Dockerfile
+    container_name: mtoolhub
+    ports:
+      - "8080:8080"
+    environment:
+      - GATEWAY_BASE_URL=http://gateway:9000
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - CLAUDE_MODEL=claude-sonnet-4-20250514
+      - EMBEDDING_MODEL=pritamdeka/S-PubMedBert-MS-MARCO
+      - EMBEDDING_DEVICE=cpu
+      - DIRECT_CALL_THRESHOLD=0.85
+      - CLAUDE_SELECT_THRESHOLD=0.60
+    volumes:
+      - ./MToolHub/backend/data:/app/data
+      - ./skills:/app/skills:ro
+    networks:
+      - toolnet
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  # Gateway 服务（已有）
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: gateway
+    ports:
+      - "9000:9000"
+    environment:
+      - TOOLS_CONFIG_DIR=/app/tools
+      - GPU_MEMORY_LIMIT=8192
+    volumes:
+      - ./gateway/tools:/app/tools:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - toolnet
+    restart: unless-stopped
+
+  # MDCalc 工具服务（已有）
+  tool-mdcalc:
+    build:
+      context: ./mdcalc
+      dockerfile: Dockerfile
+    container_name: tool-mdcalc
+    expose:
+      - "8000"
+    environment:
+      - TOOL_JSON_PATH=/data/tools_metadata.json
+    volumes:
+      - /data/wxb/toolkit/tools_metadata.json:/data/tools_metadata.json:ro
+    networks:
+      - toolnet
+    restart: unless-stopped
+
+  # 单位换算工具服务（已有）
+  tool-unit:
+    build:
+      context: ./med-calc
+      dockerfile: Dockerfile
+    container_name: tool-unit
+    expose:
+      - "8000"
+    environment:
+      - TOOL_JSON_PATH=/data/tool_unit.json
+    volumes:
+      - /data/wxb/toolkit/tool_unit.json:/data/tool_unit.json:ro
+    networks:
+      - toolnet
+    restart: unless-stopped
+
+  # 评分工具服务（已有，当前禁用）
+  # tool-scale:
+  #   build:
+  #     context: ./med-calc
+  #     dockerfile: Dockerfile
+  #   container_name: tool-scale
+  #   expose:
+  #     - "8000"
+  #   environment:
+  #     - TOOL_JSON_PATH=/data/tool_scale.json
+  #   volumes:
+  #     - /data/wxb/toolkit/tool_scale.json:/data/tool_scale.json:ro
+  #   networks:
+  #     - toolnet
+  #   restart: unless-stopped
+
+  # MAVL 胸片分析模型（已有）
+  mavl:
+    build:
+      context: ./MAVL
+      dockerfile: Dockerfile
+    container_name: mavl
+    expose:
+      - "8000"
+    environment:
+      - CHECKPOINT_PATH=/data/checkpoint_full_46.pth
+      - DEVICE=cuda
+    volumes:
+      - /data/MAVL/checkpoints/checkpoint_full_46.pth:/data/checkpoint_full_46.pth:ro
+    networks:
+      - toolnet
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+networks:
+  toolnet:
+    driver: bridge

@@ -1,0 +1,9 @@
+name: mavl
+type: remote
+endpoint: http://mavl:8000          # Docker 内网地址，服务名即容器名
+gpu_memory_mb: 400                  # 模型加载后占用显存（MB），用于 LRU 调度
+load_time_s: 30                     # /load 接口的超时时间（秒）
+predict_timeout_s: 60               # /predict 接口的超时时间（秒）
+description: "零样本胸片多标签分类 (CVPR 2024)，输出 75 种胸部疾病概率"
+input: image
+output: disease_probabilities

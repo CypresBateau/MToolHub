@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="f25d4d4e-6cfe-4f8e-bbb0-0de925fd1460" name="tx14">
+        <fileTransfer accessType="SFTP" host="8.tcp.vip.cpolar.cn" port="14979" sshConfigId="8838ccf6-b273-4246-ab88-05aa22bcb2e0" sshConfig="tx@8.tcp.vip.cpolar.cn:14979 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

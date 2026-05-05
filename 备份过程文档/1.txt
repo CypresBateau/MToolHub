@@ -1,0 +1,1243 @@
+*Thinking...*
+
+> The user wants me to create a complete plan/specification document for Claude Code to implement a system called "MToolHub". Let me synthesize all the information:
+> 
+> **System Overview:**
+> - A medical tool hub that uses vector search (RAG) to route user queries to the right tools/models/skills
+> - Backend: FastAPI
+> - Frontend: React (separate development, tools.top style)
+> - Three categories of resources:
+>   1. Medical Tools (scoring functions via existing gateway)
+>   2. Medical Models (deployed inference models via existing Docker/FastAPI gateway)
+>   3. Skills (from OpenClaw, 4 subtypes)
+> 
+> **Key decisions made:**
+> 1. Vector DB: FAISS (local)
+> 
+> 
+> 2. Embedding model: Medical domain-specific if easy to deploy
+> 3. Gateway: Unified externally with `/predict` (multipart) and `/call` (JSON) interfaces
+> 4. Frontend: Combined chat and manual browse approach
+> 5. Backend: FastAPI
+> 
+> **Existing infrastructure:**
+> - Gateway with unified external interfaces
+> - Tool containers: mavl-serving, tool-unit, tool-mdcalc, tool-scale
+> - ~1153 tools total (871 MDCalc + 237 unit + 1 MAVL)
+> - 80 skills (37 pure documentation, 27 tool-integrated)
+> 
+> For the embedding model, I'm looking at freely available medical options like PubMedBERT and BioClinicalBERT from HuggingFace, though for sentence embeddings specifically which is what we need for RAG, I should consider specialized models like S-PubMedBert or potentially fine-tune a general model like all-MiniLM-L6-v2 for medical content.
+> 
+> Now I'm putting together a structured plan document that Claude Code can follow step by step.
+
+# MToolHub 系统完整规划文档
+
+> **目标读者：Claude Code**  
+> **项目名称：MToolHub — 医疗工具智能调度平台**  
+> **开发模式：前后端分离**  
+> **后端框架：FastAPI + FAISS + Sentence-Transformers**  
+> **前端框架：React（后续独立开发）**
+
+---
+
+## 一、系统全局架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MToolHub 整体架构                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  用户请求（文本 / 文本+文件）                                                │
+│       │                                                                     │
+│       ▼                                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐          │
+│  │                    MToolHub Backend (FastAPI)                  │          │
+│  │                                                               │          │
+│  │  ┌─────────────┐    ┌──────────────┐    ┌───────────────┐   │          │
+│  │  │  API Layer  │───▶│ Router Layer │───▶│ Executor Layer│   │          │
+│  │  │ (接收请求)  │    │(向量检索+路由)│    │ (执行+编排)    │   │          │
+│  │  └─────────────┘    └──────────────┘    └───────┬───────┘   │          │
+│  │                                                  │            │          │
+│  └──────────────────────────────────────────────────┼────────────┘          │
+│                                                     │                       │
+│       ┌─────────────────────────────────────────────┼──────────┐           │
+│       │                                             ▼          │           │
+│       │  ┌──────────┐  ┌──────────────┐  ┌─────────────────┐  │           │
+│       │  │Tool Gate │  │  Model Gate  │  │   Skill Engine  │  │           │
+│       │  │ way /call│  │way /predict  │  │(Prompt Assembly)│  │           │
+│       │  └────┬─────┘  └──────┬───────┘  └────────┬────────┘  │           │
+│       │       │               │                    │           │           │
+│       │       ▼               ▼                    ▼           │           │
+│       │  ┌─────────┐   ┌──────────┐      ┌────────────────┐   │           │
+│       │  │mdcalc   │   │mavl-serve│      │ Claude API     │   │           │
+│       │  │unit     │   │(胸片等)  │      │ (带skill注入)  │   │           │
+│       │  │scale    │   └──────────┘      └────────────────┘   │           │
+│       │  └─────────┘                                           │           │
+│       │              已有基础设施（Docker Gateway）              │           │
+│       └────────────────────────────────────────────────────────┘           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 二、目录结构规划
+
+```
+MToolHub/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                      # FastAPI 入口
+│   │   ├── config.py                    # 全局配置（Gateway地址、模型路径等）
+│   │   │
+│   │   ├── api/                         # API 层
+│   │   │   ├── __init__.py
+│   │   │   ├── routes_chat.py           # 对话接口 POST /api/chat
+│   │   │   ├── routes_tools.py          # 工具浏览/手动调用接口
+│   │   │   ├── routes_search.py         # 工具搜索接口
+│   │   │   └── routes_health.py         # 健康检查
+│   │   │
+│   │   ├── router/                      # 路由层（核心：向量检索）
+│   │   │   ├── __init__.py
+│   │   │   ├── embedding_model.py       # 加载 Embedding 模型
+│   │   │   ├── index_builder.py         # 离线构建 FAISS 索引
+│   │   │   ├── vector_search.py         # 在线向量检索
+│   │   │   └── route_decision.py        # 路由决策逻辑（检索结果→调用计划）
+│   │   │
+│   │   ├── executor/                    # 执行层
+│   │   │   ├── __init__.py
+│   │   │   ├── tool_executor.py         # 调用已有 Gateway 的 /call 接口
+│   │   │   ├── model_executor.py        # 调用已有 Gateway 的 /predict 接口
+│   │   │   ├── skill_executor.py        # 组装 Skill prompt + 调用 Claude API
+│   │   │   └── orchestrator.py          # 编排多步调用（工具+模型+技能组合）
+│   │   │
+│   │   ├── registry/                    # 资源注册表
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py                  # 资源基类定义
+│   │   │   ├── tool_registry.py         # 医疗工具注册表
+│   │   │   ├── model_registry.py        # 医疗模型注册表
+│   │   │   └── skill_registry.py        # 技能注册表
+│   │   │
+│   │   ├── schemas/                     # Pydantic 数据模型
+│   │   │   ├── __init__.py
+│   │   │   ├── chat.py                  # 对话请求/响应模型
+│   │   │   ├── tool.py                  # 工具相关模型
+│   │   │   ├── model.py                 # 模型相关模型
+│   │   │   └── skill.py                 # 技能相关模型
+│   │   │
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── response_formatter.py    # 统一返回值格式化
+│   │       └── logger.py                # 日志
+│   │
+│   ├── data/
+│   │   ├── registry/                    # 注册表数据文件
+│   │   │   ├── tools.json               # 所有工具的元数据（名称、描述、参数schema）
+│   │   │   ├── models.json              # 所有模型的元数据
+│   │   │   └── skills.json              # 所有技能的元数据
+│   │   │
+│   │   ├── skills/                      # Skill 原始文件（从 OpenClaw 迁移）
+│   │   │   ├── clinical-reports/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   └── references/
+│   │   │   ├── drug-interaction/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   └── handler.py
+│   │   │   └── .../
+│   │   │
+│   │   └── faiss/                       # FAISS 索引文件（构建后生成）
+│   │       ├── tool_index.faiss
+│   │       ├── tool_metadata.pkl
+│   │       ├── model_index.faiss
+│   │       ├── model_metadata.pkl
+│   │       ├── skill_index.faiss
+│   │       └── skill_metadata.pkl
+│   │
+│   ├── scripts/
+│   │   ├── build_index.py               # 构建/重建 FAISS 索引的脚本
+│   │   ├── import_mdcalc_tools.py       # 从现有代码导入 MDCalc 工具元数据
+│   │   ├── import_skills.py             # 从 OpenClaw skill 目录导入
+│   │   └── validate_registry.py         # 验证注册表完整性
+│   │
+│   ├── tests/
+│   │   ├── test_router.py
+│   │   ├── test_executor.py
+│   │   └── test_api.py
+│   │
+│   ├── Dockerfile
+│   ├── docker-compose.yml               # MToolHub + 依赖服务
+│   ├── requirements.txt
+│   └── README.md
+│
+├── frontend/                            # 后续独立开发
+│   ├── src/
+│   ├── package.json
+│   └── README.md
+│
+└── docs/
+    ├── API.md                           # 后端 API 文档
+    ├── ARCHITECTURE.md                  # 架构设计文档
+    └── DEPLOYMENT.md                    # 部署指南
+```
+
+---
+
+## 三、核心模块详细设计
+
+### 3.1 资源注册表（Registry）
+
+三类资源都需要统一的元数据结构，供向量检索和运行时使用。
+
+#### 3.1.1 工具注册表 `data/registry/tools.json`
+
+```json
+{
+  "tools": [
+    {
+      "id": "mdcalc_cha2ds2_vasc",
+      "name": "CHA₂DS₂-VASc Score",
+      "category": "tool",
+      "sub_category": "mdcalc",
+      "gateway_tool_name": "tool-mdcalc",
+      "gateway_interface": "call",
+      "function_name": "cha2ds2_vasc_score",
+      "description": "Predicts risk of stroke in patients with atrial fibrillation. Considers age, sex, CHF history, hypertension, stroke/TIA/thromboembolism history, vascular disease, and diabetes.",
+      "description_zh": "预测房颤患者卒中风险。考虑年龄、性别、心力衰竭病史、高血压、卒中/TIA/血栓栓塞病史、血管疾病和糖尿病。",
+      "keywords": ["atrial fibrillation", "stroke", "anticoagulation", "房颤", "卒中", "抗凝"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "age": {"type": "number", "description": "Patient age in years"},
+          "sex": {"type": "string", "enum": ["male", "female"]},
+          "chf_history": {"type": "boolean"},
+          "hypertension": {"type": "boolean"},
+          "stroke_tia_history": {"type": "boolean"},
+          "vascular_disease": {"type": "boolean"},
+          "diabetes": {"type": "boolean"}
+        },
+        "required": ["age", "sex"]
+      },
+      "output_format": "dict_with_interpretation",
+      "tags": ["cardiology", "risk-assessment", "scoring"],
+      "enabled": true
+    },
+    {
+      "id": "unit_convert_glucose",
+      "name": "Glucose Unit Conversion",
+      "category": "tool",
+      "sub_category": "unit",
+      "gateway_tool_name": "tool-unit",
+      "gateway_interface": "call",
+      "function_name": "convert_glucose",
+      "description": "Converts glucose values between mg/dL and mmol/L",
+      "description_zh": "血糖单位换算（mg/dL 与 mmol/L 互转）",
+      "keywords": ["glucose", "blood sugar", "conversion", "血糖", "单位换算"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "value": {"type": "number"},
+          "from_unit": {"type": "string", "enum": ["mg/dL", "mmol/L"]}
+        },
+        "required": ["value", "from_unit"]
+      },
+      "output_format": "string",
+      "tags": ["conversion", "lab"],
+      "enabled": true
+    }
+  ]
+}
+```
+
+#### 3.1.2 模型注册表 `data/registry/models.json`
+
+```json
+{
+  "models": [
+    {
+      "id": "mavl_chest_xray",
+      "name": "Chest X-Ray Analysis (MAVL)",
+      "category": "model",
+      "sub_category": "image_analysis",
+      "gateway_tool_name": "mavl",
+      "gateway_interface": "predict",
+      "description": "Analyzes chest X-ray images to detect findings including pneumonia, pleural effusion, cardiomegaly, pneumothorax, and other thoracic abnormalities using the MAVL multi-label classification model.",
+      "description_zh": "分析胸部X光片，检测肺炎、胸腔积液、心脏扩大、气胸等胸部异常。",
+      "keywords": ["chest xray", "CXR", "pneumonia", "pleural effusion", "胸片", "肺炎", "胸腔积液"],
+      "input_type": "image",
+      "accepted_formats": ["image/png", "image/jpeg", "image/dicom"],
+      "output_format": "label_probability_list",
+      "parameters": {
+        "top_k": {"type": "integer", "default": 5, "description": "Number of top predictions to return"}
+      },
+      "tags": ["radiology", "imaging", "deep-learning"],
+      "enabled": true
+    }
+  ]
+}
+```
+
+#### 3.1.3 技能注册表 `data/registry/skills.json`
+
+```json
+{
+  "skills": [
+    {
+      "id": "skill_clinical_reports",
+      "name": "Clinical Report Generation",
+      "category": "skill",
+      "skill_type": "document_only",
+      "description": "Generates standardized clinical documents including discharge summaries, SOAP notes, consultation notes, and progress notes following medical documentation best practices.",
+      "description_zh": "生成标准化临床文档，包括出院小结、SOAP笔记、会诊记录和病程记录。",
+      "keywords": ["discharge summary", "SOAP", "clinical note", "documentation", "出院小结", "病历", "病程记录"],
+      "skill_md_path": "skills/clinical-reports/SKILL.md",
+      "references_path": null,
+      "handler_path": null,
+      "required_tools": [],
+      "tags": ["documentation", "NLP"],
+      "enabled": true
+    },
+    {
+      "id": "skill_drug_interaction",
+      "name": "Drug Interaction Analysis",
+      "category": "skill",
+      "skill_type": "executable",
+      "description": "Analyzes potential drug-drug interactions, checks contraindications, and provides severity ratings and clinical recommendations for medication combinations.",
+      "description_zh": "分析潜在的药物相互作用，检查禁忌证，为联合用药提供严重程度评级和临床建议。",
+      "keywords": ["drug interaction", "contraindication", "DDI", "medication", "药物相互作用", "禁忌", "联合用药"],
+      "skill_md_path": "skills/drug-interaction/SKILL.md",
+      "references_path": null,
+      "handler_path": "skills/drug-interaction/handler.py",
+      "required_tools": [],
+      "tags": ["pharmacology", "safety"],
+      "enabled": true
+    },
+    {
+      "id": "skill_ecg_interpretation",
+      "name": "ECG Interpretation Guide",
+      "category": "skill",
+      "skill_type": "tool_reference",
+      "description": "Provides systematic ECG interpretation guidance covering rate, rhythm, axis, intervals, and morphology analysis with reference materials for common patterns.",
+      "description_zh": "提供系统化心电图解读指南，涵盖心率、心律、电轴、间期和形态学分析。",
+      "keywords": ["ECG", "EKG", "electrocardiogram", "arrhythmia", "心电图", "心律失常"],
+      "skill_md_path": "skills/ecg-interpretation/SKILL.md",
+      "references_path": "skills/ecg-interpretation/references/",
+      "handler_path": null,
+      "required_tools": [],
+      "tags": ["cardiology", "diagnostics"],
+      "enabled": true
+    }
+  ]
+}
+```
+
+#### 3.1.4 Skill 四种子类型的处理逻辑
+
+| skill_type | 包含内容 | 运行时行为 |
+|---|---|---|
+| `document_only` | 仅 SKILL.md | 将 SKILL.md 内容注入 Claude system prompt，直接对话 |
+| `tool_reference` | SKILL.md + references/ | 将 SKILL.md + references 内容注入 system prompt（大文件截断/摘要） |
+| `executable` | SKILL.md + handler.py | 注入 SKILL.md 到 system prompt，同时将 handler.py 中导出的函数注册为 Claude tool_use |
+| `complex_workflow` | SKILL.md + repo/data/教程 | 注入 SKILL.md 到 system prompt，大型附件以摘要形式注入，必要时分步编排 |
+
+---
+
+### 3.2 路由层（Router）— 向量检索核心
+
+#### 3.2.1 Embedding 模型选择
+
+使用 `pritamdeka/S-PubMedBert-MS-MARCO`（基于 PubMedBERT 的 sentence-transformer，HuggingFace 直接下载，无需申请）。
+
+备选方案：`NeuML/pubmedbert-base-embeddings`（更轻量）。
+
+```python
+# backend/app/router/embedding_model.py
+
+from sentence_transformers import SentenceTransformer
+from app.config import settings
+
+class EmbeddingModel:
+    """单例加载 Embedding 模型"""
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.model = SentenceTransformer(
+                settings.EMBEDDING_MODEL_NAME  # "pritamdeka/S-PubMedBert-MS-MARCO"
+            )
+        return cls._instance
+    
+    def encode(self, texts: list[str]) -> np.ndarray:
+        """将文本列表编码为向量"""
+        return self.model.encode(texts, normalize_embeddings=True)
+```
+
+#### 3.2.2 索引构建
+
+```python
+# backend/scripts/build_index.py
+"""
+离线脚本：读取 registry JSON → 生成 embedding → 存入 FAISS
+每次注册表变更后运行一次
+"""
+
+import json
+import faiss
+import pickle
+import numpy as np
+from app.router.embedding_model import EmbeddingModel
+
+def build_index_for_category(registry_path: str, output_prefix: str):
+    """
+    为一类资源构建 FAISS 索引
+    
+    索引的文本由以下字段拼接：
+      "{name}. {description}. {description_zh}. Keywords: {keywords joined}"
+    
+    这样中英文查询都能匹配到。
+    """
+    with open(registry_path) as f:
+        data = json.load(f)
+    
+    items = data.get("tools") or data.get("models") or data.get("skills")
+    
+    # 构建待编码文本
+    texts = []
+    metadata = []
+    for item in items:
+        if not item.get("enabled", True):
+            continue
+        
+        text = f"{item['name']}. {item['description']}. {item.get('description_zh', '')}. Keywords: {', '.join(item.get('keywords', []))}"
+        texts.append(text)
+        metadata.append(item)  # 保存完整元数据供检索后使用
+    
+    # 编码
+    model = EmbeddingModel()
+    vectors = model.encode(texts)
+    
+    # 构建 FAISS 索引（内积，因为已 normalize，等价于余弦相似度）
+    dim = vectors.shape[1]
+    index = faiss.IndexFlatIP(dim)
+    index.add(vectors.astype(np.float32))
+    
+    # 保存
+    faiss.write_index(index, f"data/faiss/{output_prefix}_index.faiss")
+    with open(f"data/faiss/{output_prefix}_metadata.pkl", "wb") as f:
+        pickle.dump(metadata, f)
+    
+    print(f"Built index for {len(texts)} items → {output_prefix}")
+
+if __name__ == "__main__":
+    build_index_for_category("data/registry/tools.json", "tool")
+    build_index_for_category("data/registry/models.json", "model")
+    build_index_for_category("data/registry/skills.json", "skill")
+```
+
+#### 3.2.3 在线向量检索
+
+```python
+# backend/app/router/vector_search.py
+
+import faiss
+import pickle
+import numpy as np
+from app.router.embedding_model import EmbeddingModel
+from app.config import settings
+
+class VectorSearchEngine:
+    """加载 FAISS 索引，提供语义检索"""
+    
+    def __init__(self):
+        self.indices = {}
+        self.metadata = {}
+        self._load_all()
+    
+    def _load_all(self):
+        for category in ["tool", "model", "skill"]:
+            index_path = f"{settings.FAISS_DIR}/{category}_index.faiss"
+            meta_path = f"{settings.FAISS_DIR}/{category}_metadata.pkl"
+            self.indices[category] = faiss.read_index(index_path)
+            with open(meta_path, "rb") as f:
+                self.metadata[category] = pickle.load(f)
+    
+    def search(self, query: str, top_k: int = 5, categories: list[str] = None) -> list[dict]:
+        """
+        跨类别语义搜索
+        
+        返回: [{"item": {...元数据}, "score": 0.87, "category": "tool"}, ...]
+        """
+        if categories is None:
+            categories = ["tool", "model", "skill"]
+        
+        model = EmbeddingModel()
+        query_vec = model.encode([query]).astype(np.float32)
+        
+        results = []
+        for cat in categories:
+            if cat not in self.indices:
+                continue
+            scores, indices = self.indices[cat].search(query_vec, top_k)
+            for score, idx in zip(scores[0], indices[0]):
+                if idx == -1:
+                    continue
+                results.append({
+                    "item": self.metadata[cat][idx],
+                    "score": float(score),
+                    "category": cat
+                })
+        
+        # 按分数排序，取 top_k
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:top_k]
+```
+
+#### 3.2.4 路由决策
+
+```python
+# backend/app/router/route_decision.py
+
+from app.router.vector_search import VectorSearchEngine
+from app.schemas.chat import RoutingPlan
+
+class RouteDecisionMaker:
+    """
+    根据向量检索结果，生成调用计划
+    
+    策略：
+    1. 如果 top1 score > 0.85 → 高置信度，直接选定
+    2. 如果 top1 score 在 0.6~0.85 → 中置信度，取 top3 让 Claude 最终决定
+    3. 如果 top1 score < 0.6 → 低置信度，走纯对话模式（不调用工具）
+    4. 如果涉及图像输入 → 强制包含对应的 model 类资源
+    """
+    
+    THRESHOLD_HIGH = 0.85
+    THRESHOLD_LOW = 0.60
+    
+    def __init__(self, search_engine: VectorSearchEngine):
+        self.search = search_engine
+    
+    def decide(self, user_message: str, has_file: bool = False, file_type: str = None) -> RoutingPlan:
+        """
+        输入：用户消息 + 是否有附件
+        输出：RoutingPlan（包含选中的工具/模型/技能列表 + 置信度）
+        """
+        results = self.search.search(user_message, top_k=5)
+        
+        # 如果有图像文件，强制把图像模型加入候选
+        if has_file and file_type and file_type.startswith("image"):
+            image_results = self.search.search(
+                user_message, top_k=2, categories=["model"]
+            )
+            results = image_results + results
+        
+        if not results or results[0]["score"] < self.THRESHOLD_LOW:
+            return RoutingPlan(
+                mode="chat_only",
+                confidence="low",
+                selected_resources=[]
+            )
+        
+        if results[0]["score"] >= self.THRESHOLD_HIGH:
+            return RoutingPlan(
+                mode="direct_call",
+                confidence="high",
+                selected_resources=[results[0]]
+            )
+        
+        # 中置信度：返回 top3，让 Claude 从中选择
+        return RoutingPlan(
+            mode="claude_select",
+            confidence="medium",
+            selected_resources=results[:3]
+        )
+```
+
+---
+
+### 3.3 执行层（Executor）
+
+#### 3.3.1 工具执行器
+
+```python
+# backend/app/executor/tool_executor.py
+
+import httpx
+from app.config import settings
+
+class ToolExecutor:
+    """调用已有 Gateway 的 /call 接口"""
+    
+    def __init__(self):
+        self.gateway_base_url = settings.GATEWAY_BASE_URL  # e.g., "http://localhost:8000"
+    
+    async def execute(self, tool_metadata: dict, arguments: dict) -> dict:
+        """
+        tool_metadata 中包含:
+          - gateway_tool_name: "tool-mdcalc"
+          - gateway_interface: "call"  
+          - function_name: "cha2ds2_vasc_score"
+        """
+        url = f"{self.gateway_base_url}/tools/{tool_metadata['gateway_tool_name']}/call"
+        
+        payload = {
+            "function_name": tool_metadata["function_name"],
+            "arguments": arguments
+        }
+        
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+```
+
+#### 3.3.2 模型执行器
+
+```python
+# backend/app/executor/model_executor.py
+
+import httpx
+from app.config import settings
+
+class ModelExecutor:
+    """调用已有 Gateway 的 /predict 接口"""
+    
+    def __init__(self):
+        self.gateway_base_url = settings.GATEWAY_BASE_URL
+    
+    async def execute(self, model_metadata: dict, file_bytes: bytes, filename: str, **params) -> dict:
+        """
+        model_metadata 中包含:
+          - gateway_tool_name: "mavl"
+          - gateway_interface: "predict"
+          - parameters: {"top_k": {"default": 5}}
+        """
+        url = f"{self.gateway_base_url}/tools/{model_metadata['gateway_tool_name']}/predict"
+        
+        top_k = params.get("top_k", model_metadata.get("parameters", {}).get("top_k", {}).get("default", 5))
+        
+        files = {"file": (filename, file_bytes)}
+        data = {"top_k": str(top_k)}
+        
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(url, files=files, data=data)
+            response.raise_for_status()
+            return response.json()
+```
+
+#### 3.3.3 技能执行器
+
+```python
+# backend/app/executor/skill_executor.py
+
+import anthropic
+from pathlib import Path
+from app.config import settings
+
+class SkillExecutor:
+    """
+    组装 skill 的 system prompt，调用 Claude API
+    
+    四种 skill_type 的处理逻辑：
+    1. document_only → 注入 SKILL.md 到 system prompt
+    2. tool_reference → 注入 SKILL.md + references 摘要
+    3. executable → 注入 SKILL.md + 将 handler.py 的函数注册为 Claude tools
+    4. complex_workflow → 注入 SKILL.md + 大文件摘要
+    """
+    
+    def __init__(self):
+        self.client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        self.skills_dir = Path(settings.SKILLS_DIR)
+    
+    async def execute(self, skill_metadata: dict, user_message: str, conversation_history: list = None) -> str:
+        
+        skill_type = skill_metadata["skill_type"]
+        
+        # 1. 加载 SKILL.md
+        system_prompt = self._load_skill_md(skill_metadata["skill_md_path"])
+        
+        # 2. 根据类型追加内容
+        tools = []
+        
+        if skill_type == "tool_reference":
+            refs = self._load_references(skill_metadata["references_path"])
+            system_prompt += f"\n\n## Reference Materials\n{refs}"
+        
+        elif skill_type == "executable":
+            tools = self._load_handler_as_tools(skill_metadata["handler_path"])
+        
+        elif skill_type == "complex_workflow":
+            # 大文件只加载摘要/前 N 行
+            refs = self._load_references(skill_metadata.get("references_path"), max_chars=4000)
+            system_prompt += f"\n\n## Reference Materials (truncated)\n{refs}"
+        
+        # 3. 调用 Claude
+        messages = conversation_history or []
+        messages.append({"role": "user", "content": user_message})
+        
+        kwargs = {
+            "model": settings.CLAUDE_MODEL,
+            "max_tokens": 4096,
+            "system": system_prompt,
+            "messages": messages
+        }
+        if tools:
+            kwargs["tools"] = tools
+        
+        response = await self.client.messages.create(**kwargs)
+        
+        # 4. 如果 Claude 返回 tool_use，执行并继续
+        if response.stop_reason == "tool_use":
+            return await self._handle_tool_use(response, kwargs)
+        
+        return response.content[0].text
+    
+    def _load_skill_md(self, path: str) -> str:
+        full_path = self.skills_dir / path
+        return full_path.read_text(encoding="utf-8")
+    
+    def _load_references(self, path: str, max_chars: int = 8000) -> str:
+        if not path:
+            return ""
+        ref_dir = self.skills_dir / path
+        content = ""
+        for f in sorted(ref_dir.iterdir()):
+            if f.is_file() and f.suffix in [".md", ".txt", ".json"]:
+                content += f"\n### {f.name}\n{f.read_text()[:max_chars]}\n"
+            if len(content) > max_chars:
+                break
+        return content[:max_chars]
+    
+    def _load_handler_as_tools(self, handler_path: str) -> list[dict]:
+        """
+        从 handler.py 中导出的函数，转为 Claude tool_use 格式
+        handler.py 应 export 一个 TOOLS 列表，每个元素是标准 tool schema
+        """
+        import importlib.util
+        full_path = self.skills_dir / handler_path
+        spec = importlib.util.spec_from_file_location("handler", full_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return getattr(module, "TOOLS", [])
+```
+
+#### 3.3.4 编排器（Orchestrator）
+
+```python
+# backend/app/executor/orchestrator.py
+
+from app.router.route_decision import RouteDecisionMaker, RoutingPlan
+from app.executor.tool_executor import ToolExecutor
+from app.executor.model_executor import ModelExecutor
+from app.executor.skill_executor import SkillExecutor
+import anthropic
+from app.config import settings
+
+class Orchestrator:
+    """
+    核心编排逻辑：根据 RoutingPlan 执行调用
+    
+    三种模式：
+    1. chat_only → 直接调用 Claude，不注入任何工具
+    2. direct_call → 高置信度，直接执行选定的资源
+    3. claude_select → 中置信度，把候选资源作为 tools 传给 Claude 让它选
+    """
+    
+    def __init__(self):
+        self.tool_executor = ToolExecutor()
+        self.model_executor = ModelExecutor()
+        self.skill_executor = SkillExecutor()
+        self.claude_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    
+    async def run(self, user_message: str, routing_plan: RoutingPlan, 
+                  file_bytes: bytes = None, filename: str = None,
+                  conversation_history: list = None) -> dict:
+        """
+        返回: {"response": "最终回答文本", "tools_used": [...], "debug": {...}}
+        """
+        
+        if routing_plan.mode == "chat_only":
+            return await self._chat_only(user_message, conversation_history)
+        
+        elif routing_plan.mode == "direct_call":
+            resource = routing_plan.selected_resources[0]
+            return await self._direct_execute(resource, user_message, file_bytes, filename, conversation_history)
+        
+        elif routing_plan.mode == "claude_select":
+            return await self._claude_select(routing_plan.selected_resources, user_message, file_bytes, filename, conversation_history)
+    
+    async def _chat_only(self, user_message: str, history: list) -> dict:
+        """纯对话，不调用任何工具"""
+        messages = (history or []) + [{"role": "user", "content": user_message}]
+        response = await self.claude_client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=4096,
+            system="你是一个专业的医疗助手。如果用户的问题涉及具体的计算或诊断，建议他们提供更多信息以便调用专业工具。",
+            messages=messages
+        )
+        return {"response": response.content[0].text, "tools_used": [], "mode": "chat_only"}
+    
+    async def _direct_execute(self, resource: dict, user_message: str, 
+                               file_bytes: bytes, filename: str, history: list) -> dict:
+        """高置信度直接执行"""
+        item = resource["item"]
+        category = resource["category"]
+        
+        if category == "tool":
+            # 让 Claude 从用户消息中提取参数，然后调用工具
+            return await self._execute_tool_with_claude(item, user_message, history)
+        
+        elif category == "model":
+            if not file_bytes:
+                return {"response": f"该功能需要上传{item.get('input_type', '文件')}，请上传后重试。", "tools_used": [], "mode": "direct_call"}
+            result = await self.model_executor.execute(item, file_bytes, filename)
+            # 让 Claude 解读模型结果
+            return await self._interpret_model_result(item, result, user_message, history)
+        
+        elif category == "skill":
+            text = await self.skill_executor.execute(item, user_message, history)
+            return {"response": text, "tools_used": [item["id"]], "mode": "direct_call"}
+    
+    async def _execute_tool_with_claude(self, tool_item: dict, user_message: str, history: list) -> dict:
+        """
+        用 Claude 的 tool_use 能力从自然语言中提取参数，然后调用工具
+        
+        流程：
+        1. 把工具的 input_schema 注册为 Claude tool
+        2. 发送用户消息
+        3. Claude 返回 tool_use（带提取的参数）
+        4. 调用真实工具
+        5. 把结果返回 Claude 生成最终回答
+        """
+        claude_tools = [{
+            "name": tool_item["id"],
+            "description": tool_item["description"],
+            "input_schema": tool_item["input_schema"]
+        }]
+        
+        messages = (history or []) + [{"role": "user", "content": user_message}]
+        
+        response = await self.claude_client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=4096,
+            system="你是医疗计算助手。请根据用户输入的信息调用合适的工具进行计算。如果用户未提供某些必需参数，请直接询问。",
+            tools=claude_tools,
+            messages=messages
+        )
+        
+        if response.stop_reason == "tool_use":
+            # 提取 Claude 决定的参数
+            tool_use_block = next(b for b in response.content if b.type == "tool_use")
+            arguments = tool_use_block.input
+            
+            # 调用真实 Gateway
+            tool_result = await self.tool_executor.execute(tool_item, arguments)
+            
+            # 把结果返回给 Claude 做解读
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": [{
+                "type": "tool_result",
+                "tool_use_id": tool_use_block.id,
+                "content": str(tool_result)
+            }]})
+            
+            final_response = await self.claude_client.messages.create(
+                model=settings.CLAUDE_MODEL,
+                max_tokens=4096,
+                system="你是医疗计算助手。请根据工具返回的结果给用户清晰的解释。",
+                tools=claude_tools,
+                messages=messages
+            )
+            
+            return {
+                "response": final_response.content[0].text,
+                "tools_used": [tool_item["id"]],
+                "tool_result_raw": tool_result,
+                "mode": "direct_call"
+            }
+        
+        # Claude 没有调用工具（可能在追问参数）
+        return {"response": response.content[0].text, "tools_used": [], "mode": "direct_call"}
+```
+
+---
+
+### 3.4 API 层
+
+#### 3.4.1 对话接口
+
+```python
+# backend/app/api/routes_chat.py
+
+from fastapi import APIRouter, UploadFile, File, Form
+from app.router.vector_search import VectorSearchEngine
+from app.router.route_decision import RouteDecisionMaker
+from app.executor.orchestrator import Orchestrator
+from app.schemas.chat import ChatRequest, ChatResponse
+
+router = APIRouter()
+
+# 全局实例（应用启动时初始化）
+search_engine = VectorSearchEngine()
+decision_maker = RouteDecisionMaker(search_engine)
+orchestrator = Orchestrator()
+
+@router.post("/api/chat", response_model=ChatResponse)
+async def chat(
+    message: str = Form(...),
+    file: UploadFile = File(None),
+    conversation_id: str = Form(None)
+):
+    """
+    主对话接口
+    
+    支持：纯文本对话 / 文本+文件（如胸片）
+    """
+    # 1. 路由决策
+    has_file = file is not None
+    file_type = file.content_type if file else None
+    
+    routing_plan = decision_maker.decide(
+        user_message=message,
+        has_file=has_file,
+        file_type=file_type
+    )
+    
+    # 2. 读取文件（如有）
+    file_bytes = None
+    filename = None
+    if file:
+        file_bytes = await file.read()
+        filename = file.filename
+    
+    # 3. 执行
+    result = await orchestrator.run(
+        user_message=message,
+        routing_plan=routing_plan,
+        file_bytes=file_bytes,
+        filename=filename,
+        conversation_history=None  # TODO: 从 conversation_id 恢复历史
+    )
+    
+    return ChatResponse(
+        response=result["response"],
+        tools_used=result.get("tools_used", []),
+        routing_info={
+            "mode": routing_plan.mode,
+            "confidence": routing_plan.confidence,
+            "candidates": [r["item"]["name"] for r in routing_plan.selected_resources]
+        }
+    )
+```
+
+#### 3.4.2 工具浏览/搜索接口
+
+```python
+# backend/app/api/routes_tools.py
+
+from fastapi import APIRouter, Query
+from app.router.vector_search import VectorSearchEngine
+
+router = APIRouter()
+search_engine = VectorSearchEngine()
+
+@router.get("/api/tools")
+async def list_tools(
+    category: str = Query(None, description="Filter by category: tool/model/skill"),
+    tag: str = Query(None, description="Filter by tag"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100)
+):
+    """工具列表（分页、筛选）— 供前端浏览页面使用"""
+    # 从 registry 读取，支持分类筛选
+    pass
+
+@router.get("/api/tools/search")
+async def search_tools(
+    q: str = Query(..., description="Search query"),
+    top_k: int = Query(10, ge=1, le=50)
+):
+    """语义搜索工具 — 供前端搜索框使用"""
+    results = search_engine.search(q, top_k=top_k)
+    return {"results": results}
+
+@router.get("/api/tools/{tool_id}")
+async def get_tool_detail(tool_id: str):
+    """工具详情 — 供前端工具详情页使用"""
+    pass
+
+@router.post("/api/tools/{tool_id}/execute")
+async def manual_execute_tool(tool_id: str, arguments: dict):
+    """手动调用工具（前端用户手填参数后直接调用）"""
+    pass
+```
+
+---
+
+## 四、数据导入流程
+
+### 4.1 从现有 MDCalc 代码导入
+
+```python
+# backend/scripts/import_mdcalc_tools.py
+"""
+扫描已有的 tool-mdcalc 容器中的函数定义，
+提取每个 function 的名称、参数、描述，写入 tools.json
+
+需要你提供：mdcalc 工具的原始定义文件位置
+（可能是 Python 文件中的函数签名 + docstring，或某种 JSON schema）
+"""
+```
+
+### 4.2 从 OpenClaw Skill 目录导入
+
+```python
+# backend/scripts/import_skills.py
+"""
+扫描 skills/ 目录结构：
+1. 找到所有 SKILL.md
+2. 从 SKILL.md 开头提取元数据（名称、描述）
+3. 检查是否存在 references/、handler.py、repo/ 来判断 skill_type
+4. 生成 skills.json
+
+skill_type 判定规则：
+  - 仅有 SKILL.md → document_only
+  - 有 references/ → tool_reference
+  - 有 .py 文件（且含 TOOLS 导出）→ executable
+  - 有 repo/ 或 data/ 或 tutorial/ → complex_workflow
+"""
+```
+
+---
+
+## 五、配置文件
+
+```python
+# backend/app/config.py
+
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # 服务
+    APP_HOST: str = "0.0.0.0"
+    APP_PORT: int = 8080
+    
+    # 已有 Gateway
+    GATEWAY_BASE_URL: str = "http://localhost:8000"
+    
+    # Claude API
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL: str = "claude-sonnet-4-20250514"
+    
+    # Embedding 模型
+    EMBEDDING_MODEL_NAME: str = "pritamdeka/S-PubMedBert-MS-MARCO"
+    
+    # 路径
+    FAISS_DIR: str = "data/faiss"
+    SKILLS_DIR: str = "data/skills"
+    REGISTRY_DIR: str = "data/registry"
+    
+    # 路由阈值
+    ROUTE_THRESHOLD_HIGH: float = 0.85
+    ROUTE_THRESHOLD_LOW: float = 0.60
+    
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+---
+
+## 六、前端规划（独立开发阶段）
+
+### 6.1 技术栈
+
+- React + TypeScript
+- TailwindCSS
+- React Router
+- Axios（API 调用）
+- 状态管理：Zustand（轻量）
+
+### 6.2 页面结构
+
+```
+MToolHub 前端
+├── 首页（Dashboard）
+│   ├── 顶部搜索栏（语义搜索，调 /api/tools/search）
+│   ├── 分类卡片区（三大类：工具 / 模型 / 技能）
+│   └── 热门/推荐工具
+│
+├── 工具浏览页（/tools）
+│   ├── 左侧分类筛选（按 tag、category 筛选）
+│   ├── 卡片网格展示（类似 tools.top 风格）
+│   └── 每张卡片：图标 + 名称 + 一句话描述 + 标签
+│
+├── 工具详情页（/tools/:id）—— 参考 tools.top/myip.html 风格
+│   ├── 工具名称 + 描述
+│   ├── 参数输入表单（根据 input_schema 动态生成）
+│   ├── 执行按钮 + 结果展示区
+│   └── 相关工具推荐
+│
+├── 对话页（/chat）
+│   ├── 类 ChatGPT 对话界面
+│   ├── 支持文件上传（拖拽或按钮）
+│   ├── 消息气泡中展示：文字回复 + 调用了哪些工具 + 工具原始结果（可折叠）
+│   └── 侧边栏：对话历史列表
+│
+└── 关于页（/about）
+```
+
+### 6.3 前后端接口约定
+
+| 前端页面 | 调用接口 | 用途 |
+|---------|---------|------|
+| 搜索栏 | `GET /api/tools/search?q=xxx` | 语义搜索工具 |
+| 浏览页 | `GET /api/tools?category=xxx&page=1` | 分页列表 |
+| 详情页 | `GET /api/tools/{id}` | 工具详情+schema |
+| 详情页执行 | `POST /api/tools/{id}/execute` | 手动执行 |
+| 对话页 | `POST /api/chat` (multipart) | 对话+自动路由 |
+
+### 6.4 前端 UI 设计原则
+
+参考 tools.top 的卡片式布局风格：干净的白色卡片、圆角、hover 阴影、分类标签用彩色小药丸。对话页参考标准 chat UI。工具详情页参考 tools.top/myip.html：上方是工具说明，中间是输入区域，下方是结果展示。
+
+---
+
+## 七、开发阶段划分
+
+### Phase 1：基础框架 + 注册表（第 1~2 天）
+
+**任务：**
+1. 初始化 FastAPI 项目结构（按目录规划创建所有文件骨架）
+2. 定义 Pydantic schemas（ChatRequest, ChatResponse, ToolItem, ModelItem, SkillItem）
+3. 编写 config.py + .env.example
+4. 创建注册表数据结构并手动填入 5~10 个示例工具（覆盖三类四种skill_type）
+5. 编写 `scripts/import_mdcalc_tools.py` 骨架（从已有代码提取元数据）
+6. 编写 `scripts/import_skills.py` 骨架
+
+**交付物：** 能 `uvicorn app.main:app` 启动，`/docs` 可看到所有 API 定义（尽管逻辑未实现）
+
+---
+
+### Phase 2：向量检索引擎（第 3~4 天）
+
+**任务：**
+1. 安装并测试 `sentence-transformers` + `pritamdeka/S-PubMedBert-MS-MARCO`
+2. 实现 `embedding_model.py`（单例加载）
+3. 实现 `scripts/build_index.py`（从 registry JSON → FAISS 索引）
+4. 实现 `vector_search.py`（加载索引 + 搜索）
+5. 实现 `route_decision.py`（阈值策略）
+6. 编写 `/api/tools/search` 接口
+7. 单元测试：给定查询，验证能返回正确的工具
+
+**交付物：** `GET /api/tools/search?q=房颤卒中风险` 能返回 CHA2DS2-VASc 等相关工具
+
+---
+
+### Phase 3：执行层 + 对话接口（第 5~7 天）
+
+**任务：**
+1. 实现 `tool_executor.py`（对接已有 Gateway /call）
+2. 实现 `model_executor.py`（对接已有 Gateway /predict）
+3. 实现 `skill_executor.py`（四种 skill_type 的加载+调用 Claude）
+4. 实现 `orchestrator.py`（三种模式编排）
+5. 实现 `POST /api/chat` 完整流程
+6. 实现 `POST /api/tools/{id}/execute`（手动调用）
+7. 集成测试：发消息→路由→执行→返回
+
+**交付物：** 用 curl/Postman 发 "65岁男性有房颤和高血压，卒中风险多高？" 能自动匹配 CHA2DS2-VASc 并返回计算结果+解释
+
+---
+
+### Phase 4：数据全量导入（第 8~9 天）
+
+**任务：**
+1. 完善 `import_mdcalc_tools.py`：从现有 871 个函数提取完整元数据
+2. 完善 `import_skills.py`：从 OpenClaw 80 个 skill 目录提取
+3. 手动编写模型注册信息（数量少，直接写 JSON）
+4. 运行 `build_index.py` 构建完整索引
+5. 验证各类查询的检索准确率
+6. 调优阈值参数
+
+**交付物：** 全部 1000+ 资源可检索，端到端功能正常
+
+---
+
+### Phase 5：前端开发（第 10~14 天，独立进行）
+
+**任务：**
+1. 初始化 React + TypeScript + TailwindCSS 项目
+2. 实现首页（搜索 + 分类卡片）
+3. 实现工具浏览页（网格 + 筛选 + 分页）
+4. 实现工具详情页（动态表单 + 执行 + 结果展示）
+5. 实现对话页（消息列表 + 输入框 + 文件上传 + 工具调用可视化）
+6. 响应式适配
+7. 联调后端 API
+
+**交付物：** 完整可用的 MToolHub 平台 UI
+
+---
+
+### Phase 6：Docker 化 + 部署（第 15~16 天）
+
+**任务：**
+1. 编写 backend Dockerfile（含模型下载）
+2. 编写 frontend Dockerfile（nginx 静态托管）
+3. 编写 docker-compose.yml（mtoolhub-backend + mtoolhub-frontend + 已有 gateway 网络互通）
+4. 编写 README 部署文档
+
+---
+
+## 八、关键技术决策汇总
+
+| 决策项 | 选择 | 理由 |
+|-------|------|------|
+| 向量数据库 | FAISS (IndexFlatIP) | 数据量 ~1000 条，无需分布式，本地内存足够 |
+| Embedding 模型 | pritamdeka/S-PubMedBert-MS-MARCO | 医学领域、sentence-transformers 兼容、HuggingFace 直接下载 |
+| 后端框架 | FastAPI | 与已有 Gateway 统一、异步支持好 |
+| LLM | Claude (Anthropic API) | tool_use 能力成熟，参数提取可靠 |
+| 路由策略 | 向量检索 + 阈值分级 | 平衡准确率和延迟，高置信直接调、中置信让 Claude 选 |
+| 前后端通信 | REST API (JSON) | 简单清晰，后续可加 WebSocket 做流式 |
+| Skill 处理 | 按 type 分发、动态注入 system prompt | 最大化利用 Claude 能力 |
+
+---
+
+## 九、注意事项与约束
+
+1. **Embedding 模型首次下载**：`pritamdeka/S-PubMedBert-MS-MARCO` 约 420MB，首次运行自动从 HuggingFace 下载，需要网络。Docker 部署时应在 build 阶段预下载。
+
+2. **Claude API 成本控制**：`chat_only` 和 `claude_select` 模式每次对话至少 1 次 Claude API 调用；`direct_call` 工具模式是 2 次（提取参数+解释结果）。Skill 模式 1~N 次（取决于是否有 tool_use 循环）。考虑对简单工具调用在前端做参数表单收集，绕过 Claude 直接 `/execute`。
+
+3. **Gateway 网络连通性**：MToolHub backend 容器需要能访问已有 Gateway（`GATEWAY_BASE_URL`）。Docker 部署时需在同一 network。
+
+4. **FAISS 索引重建**：每次 registry JSON 更新后需手动运行 `python scripts/build_index.py`。后续可考虑添加 API 端点触发重建。
+
+5. **会话管理**：Phase 1~4 暂不实现持久化会话管理（无数据库）。对话历史暂存内存。Phase 5+ 可考虑加 Redis/SQLite。
+
+6. **安全**：医疗工具输出应始终附带免责声明。Claude system prompt 中应包含"仅供参考，不构成医疗建议"的提示。
+
+---
+
+## 十、文件依赖清单
+
+```
+# backend/requirements.txt
+
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+httpx>=0.25.0
+anthropic>=0.39.0
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+numpy>=1.24.0
+python-dotenv>=1.0.0
+```
+
+---
+
+这份规划文档覆盖了完整的后端架构、路由逻辑、执行层、数据导入、前端需求、以及开发阶段。Claude Code 可以按 Phase 顺序逐步实现。如果有任何模块的细节需要进一步展开，告诉我。

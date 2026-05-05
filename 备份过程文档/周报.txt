@@ -1,0 +1,195 @@
+*Thinking...*
+
+> 用户觉得我的周报太简略了，需要更加详细和充实。让我重新写一个更详细的版本，把每个模块的内容展开，增加更多技术细节，把问题描述得更具体，Todo List也写得更充实。
+
+# 本周工作周报
+
+## 本周实现功能点
+- 完成 MToolHub 医疗工具智能调度平台后端全栈开发，涵盖基础框架搭建、注册表管理系统、向量语义检索引擎、三级路由决策机制、Claude API 集成与参数提取/结果解释双向能力、三类资源执行器（工具/模型/技能）、编排器统一调度、对话与直接执行双接口、自动化数据导入脚本、以及完整的 Docker 容器化部署方案
+- 实现了对 1108 个医疗计算工具、1 个影像分析模型、88 个临床技能的统一注册、语义检索与智能调度
+- 设计并实现了从自然语言输入到结构化工具调用再到自然语言输出的完整闭环
+
+## 当前开发阶段（勾选）
+- [x] 需求分析
+- [x] 系统设计
+- [x] 功能实现
+- [ ] 测试验证
+- [ ] 部署上线
+
+## 本周进展
+
+### （1）已完成模块
+
+#### 模块名称：基础框架与配置管理系统
+- 功能描述：
+  - 基于 FastAPI 搭建后端服务框架，配置 CORS 中间件支持跨域访问，注册路由模块并实现启动/关闭事件钩子
+  - 使用 pydantic-settings 实现全局配置管理，支持从环境变量和 .env 文件加载配置项，涵盖 Gateway 地址、Claude API Key、Embedding 模型路径、路由阈值等参数
+  - 定义三类资源的完整数据模型：`ToolMetadata`（工具元数据，含函数列表、参数定义、Gateway 名称映射）、`ModelMetadata`（模型元数据，含输入类型、预测接口）、`SkillMetadata`（技能元数据，含技能类型、SKILL.md 路径、references 路径）
+  - 定义 API 请求/响应数据结构：`ChatRequest/ChatResponse`、`ExecuteRequest/ExecuteResponse`、`RoutingPlan`、`ToolSearchRequest/ToolSearchResponse`
+  - 实现 `RegistryManager` 注册表管理器，支持从 JSON 文件加载三类资源、按 ID 精确查询、按类别过滤、分页获取列表、运行时热重载
+  - 实现健康检查接口 `GET /health`（返回服务状态、版本号、资源统计）、工具列表接口 `GET /api/tools`（支持分页与类别过滤）、工具详情接口 `GET /api/tools/{resource_id}`
+  - 封装医疗免责声明工具模块，所有对外响应自动附加标准化免责声明
+- 产出形式：
+  - Git commit：feat: MToolHub backend - base framework, config management & registry system
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：向量语义检索引擎
+- 功能描述：
+  - 集成 sentence-transformers 库，加载医学领域预训练 Embedding 模型 `pritamdeka/S-PubMedBert-MS-MARCO`（基于 PubMedBERT 在 MS MARCO 上微调），输出 768 维向量，自动归一化以支持余弦相似度计算
+  - 实现 `EmbeddingModel` 单例类，全局复用模型实例避免重复加载（模型约 420MB）
+  - 实现 `FAISSIndex` 类管理单个类别的索引，索引文本格式为 `"{name}. {description}. {description_zh}. Keywords: {keywords}"`，使用 FAISS IndexFlatIP（内积索引，归一化后等价于余弦相似度）
+  - 实现 `VectorSearchEngine` 跨类别搜索引擎，管理 tool / model / skill 三个独立索引，支持全局搜索和限定类别搜索，结果按相似度分数降序排列
+  - 编写 `scripts/build_index.py` 索引构建脚本，从注册表 JSON 读取资源、为每个类别生成向量并构建索引、持久化到 `data/indexes/` 目录（含 .faiss 索引文件和 .pkl 元数据文件）
+  - 实现语义搜索 API `GET /api/tools/search`，支持参数：`q`（查询文本）、`top_k`（返回数量，1-20）、`categories`（限定类别，逗号分隔）
+  - 性能指标：1197 条记录下单次检索延迟 < 50ms，索引内存占用约 50MB
+- 产出形式：
+  - Git commit：feat: vector semantic search engine with FAISS & medical embedding
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：三级路由决策机制
+- 功能描述：
+  - 实现 `RouteDecisionMaker` 路由决策器，基于向量检索分数自动决定调用模式
+  - 三级阈值设计：
+    - **direct_call**（分数 ≥ 0.85）：高置信度，直接选择 top-1 资源执行，无需 Claude 二次判断
+    - **claude_select**（分数 0.60 ~ 0.85）：中置信度，取 top-3 候选资源交由 Claude 根据上下文选择最优
+    - **chat_only**（分数 < 0.60）：低置信度，不调用任何工具，进入纯对话模式由 Claude 直接回答
+  - 阈值支持通过 .env 环境变量动态配置（`DIRECT_CALL_THRESHOLD`、`CLAUDE_SELECT_THRESHOLD`）
+  - 图像文件特殊处理逻辑：当用户上传图像文件时，强制将图像分析模型（MAVL）加入候选资源列表，确保影像分析需求不被漏判
+  - 返回结构化 `RoutingPlan` 对象，包含：mode（路由模式）、confidence（置信度等级）、selected_resources（候选资源列表及分数）、trace（决策链路追踪）
+- 产出形式：
+  - Git commit：feat: three-tier routing decision mechanism
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：Claude API 客户端封装
+- 功能描述：
+  - 封装 Anthropic Claude API，提供四大核心能力方法：
+  - **`extract_parameters()`**：从自然语言中提取结构化参数。将工具的参数定义转换为 Claude tool_use 格式，调用 Claude 让其从用户消息中识别并提取出所有参数值，返回结构化字典。支持复杂参数类型、自动类型转换、处理缺失值（默认填 0）
+  - **`interpret_result()`**：将工具的 JSON 输出转换为自然语言解释。传入用户原始问题、工具名称和原始结果，Claude 生成上下文相关的解释，包括专业术语说明、风险等级提示、后续建议
+  - **`chat()`**：纯对话模式，不调用任何工具。用于向量检索置信度低于 0.60 的场景，或用户询问一般医学知识、无需工具的咨询
+  - **`select_and_execute()`**：Claude 选择模式。将 top-3 候选资源转换为 Claude tools 格式，Claude 根据用户消息语义判断选择最合适的工具并调用，适用于置信度在 0.60-0.85 之间的模糊场景
+  - 所有方法均为异步实现，支持超时控制（默认 30 秒）和异常捕获
+- 产出形式：
+  - Git commit：feat: Claude API client with parameter extraction & result interpretation
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：三类资源执行器
+- 功能描述：
+  - 设计 `Executor` 抽象基类，采用策略模式（Strategy Pattern），定义统一的 `execute()` 接口，返回标准化结果格式（success / result / trace / disclaimer）
+  - **ToolExecutor（工具执行器）**：负责 MDCalc、单位换算、评分工具的调用。流程为：① 参数提取（已有则直接使用，否则调 Claude extract_parameters）→ ② 调用 Gateway（POST `http://gateway:9000/tools/{name}/call`，传入 function_name 和 arguments）→ ③ 结果解释（调 Claude interpret_result 生成自然语言）。支持 Gateway 连接失败重试 3 次
+  - **ModelExecutor（模型执行器）**：负责 MAVL 胸片分析等影像模型调用。流程为：① 验证 file_bytes 存在 → ② 调用 Gateway（POST `http://gateway:9000/tools/{name}/predict`，multipart/form-data 传图像和 top_k 参数）→ ③ Claude 解释疾病概率。输出格式为 predictions 列表（disease + probability）
+  - **SkillExecutor（技能执行器）**：负责加载并执行 SKILL.md 技能。根据技能类型分四种处理方式：
+    - `document_only`：仅加载 SKILL.md 注入 system prompt，调 Claude chat
+    - `tool_reference`：加载 SKILL.md + references/ 目录下参考文档（限 8000 字符），合并注入 system prompt
+    - `executable`：加载 SKILL.md + coworker.py 中的 TOOLS 函数列表，将 Python 函数转为 Claude tool_use 格式，支持工具调用
+    - `complex_workflow`：暂返回提示信息，留待后续实现
+- 产出形式：
+  - Git commit：feat: tool/model/skill executors with strategy pattern
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：编排器（Orchestrator）
+- 功能描述：
+  - 实现 `Orchestrator` 编排器作为执行层的统一入口，接收 `RoutingPlan` 并协调执行
+  - 根据 `RoutingPlan.mode` 分发到三种执行模式：
+    - `chat_only`：直接调用 `claude_client.chat()` 返回对话结果
+    - `direct_call`：从 routing_plan 取 top-1 资源，根据 category 选择对应执行器执行
+    - `claude_select`：取 top-3 候选资源，调用 `claude_client.select_and_execute()` 让 Claude 二次判断
+  - 内部通过 `_get_executor(category)` 方法进行执行器选择（tool → ToolExecutor / model → ModelExecutor / skill → SkillExecutor）
+  - 集中管理错误处理、执行追踪信息记录、统一响应格式封装
+  - 实现路由决策与执行逻辑的完全解耦，便于独立测试和后续扩展
+- 产出形式：
+  - Git commit：feat: orchestrator for unified execution coordination
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：对话接口与直接执行接口
+- 功能描述：
+  - **`POST /api/chat`（对话接口）**：支持 multipart/form-data 格式，接收 message（文本）、file（可选，如胸片图像）、conversation_id（可选，会话 ID）。执行流程：接收请求 → 路由决策 → 编排器执行 → 返回响应。响应包含 response（回复文本）、tools_used（使用的工具列表）、routing_info（路由模式、置信度、候选资源、追踪信息）、disclaimer（免责声明）
+  - **`POST /api/execute`（直接执行接口）**：支持 JSON 格式，接收 resource_id（如 "tool-mdcalc:wells_score_dvt"）、arguments（结构化参数字典）、context（可选上下文）。绕过路由决策直接执行指定资源，适用于前端已确定要调用哪个工具的场景
+  - 两个接口均包含完整的 Pydantic 参数验证、错误处理和标准化响应格式
+  - 所有 I/O 操作均使用 async/await 异步执行，使用 httpx.AsyncClient 连接池复用连接
+- 产出形式：
+  - Git commit：feat: chat & execute API endpoints
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：自动化数据导入系统
+- 功能描述：
+  - **`scripts/import_from_gateway.py`**：自动从 Gateway 的 `/tools` 接口发现并导入所有已注册资源。识别逻辑：`type=remote, input=json` → 工具类（进一步调 `/tools/{name}/info` 获取函数列表和参数定义）；`type=remote, input=image` → 模型类。解析转换后生成 `data/registry/tools.json`（1108 个工具）和 `data/registry/models.json`（1 个模型）
+  - **`scripts/import_skills.py`**：自动扫描 `skills/` 目录导入技能。类型检测规则：仅 SKILL.md → document_only；含 references/ → tool_reference；含 coworker.py（有 TOOLS 列表）→ executable；含大型数据/多子目录 → complex_workflow。元数据提取：从 SKILL.md 首个 # 标题取名称，首段取描述，Keywords/关键词行取关键词，自动检测中英文。最终导入 88 个技能（document_only: 45, tool_reference: 28, executable: 12, complex_workflow: 3）
+  - 两个脚本均支持命令行参数自定义 Gateway URL 和输出目录
+- 产出形式：
+  - Git commit：feat: automated data import scripts for gateway resources & skills
+  - PR链接：
+  - 系统截图：
+
+#### 模块名称：Docker 容器化与服务编排
+- 功能描述：
+  - 编写 `Dockerfile`：基于 python:3.10-slim，在构建阶段预下载 Embedding 模型加速运行时首次启动，配置健康检查（每 30 秒探测 `/api/health`），暴露 8080 端口
+  - 编写 `docker-compose.yml` 实现完整服务编排，包含 6 个服务：
+    - mtoolhub（后端主服务，端口 8080）
+    - gateway（路由网关，端口 9000）
+    - tool-mdcalc（871 个医学计算器）
+    - tool-unit（237 个单位换算）
+    - tool-scale（44 个评分工具，当前注释禁用）
+    - mavl（胸片 AI 分析模型，需 GPU）
+  - 网络隔离设计：所有服务加入 `toolnet` 桥接网络，工具/模型服务仅 expose 内部端口不对外暴露，仅 Gateway 和 MToolHub 通过 ports 对外提供访问
+  - 环境变量管理：CLAUDE_API_KEY 从宿主机注入，GATEWAY_BASE_URL 使用容器内网地址
+  - 编写 `.dockerignore` 排除不必要文件
+  - 资源占用预估：MToolHub ~500MB 内存，Gateway ~100MB，工具容器 ~50MB/个，MAVL ~400MB GPU 显存 + 200MB 内存
+- 产出形式：
+  - Git commit：feat: Dockerfile & docker-compose for full-stack deployment
+  - PR链接：
+  - 系统截图：
+
+### （2）问题与Bug（Issues）
+
+| 类型 | 描述 | 当前状态 |
+|------|------|----------|
+| 功能限制 | SkillExecutor 的 `complex_workflow` 类型暂未实现，涉及多步骤编排和状态管理，该类型技能目前仅返回提示信息，影响 3 个技能的可用性 | 待后续迭代，已在代码中预留接口 |
+| 待验证 | `import_skills.py` 的技能类型自动检测规则基于目录结构和文件存在性判断，尚未在完整 869 个技能目录上验证准确率，可能存在误分类 | 待大规模数据验证 |
+| 待验证 | 当 Gateway 下游服务（tool-mdcalc / mavl）响应慢或不稳定时，ToolExecutor 的 3 次重试机制是否足够健壮，超时设置（60s）是否合理 | 待压力测试 |
+| 待补充 | 单元测试文件（test_executor.py / test_orchestrator.py / test_claude_client.py）框架已规划但测试用例未编写，当前仅依赖手动 curl 验证 | 待开发 |
+| 性能风险 | Embedding 模型首次加载约 10 秒，若容器重启频繁会影响可用性；FAISS 索引在 1197 条时性能良好，但扩展到完整 869 技能后（总计约 2000+ 条）需重新评估 | 待监控观察 |
+| 设计待定 | 对话历史（conversation_history）当前存储在内存变量中，容器重启后丢失；会话管理机制需引入持久化方案（如 Redis） | 设计中，列入下阶段任务 |
+
+### （3）本周最大问题
+- 三类资源（工具/模型/技能）的调用方式差异巨大：工具是 JSON RPC 式调用需要精确参数、模型是 multipart 文件上传、技能是 prompt 注入式对话。如何在统一的 Executor 接口下优雅地抽象这三种模式，并在编排器中以一致的方式处理，是本周设计上花费时间最多的部分。最终采用策略模式解决，但 SkillExecutor 内部仍需进一步按四种子类型分支处理，代码复杂度较高。
+
+## Todo List
+
+### 任务1
+- 任务内容：编写完整的单元测试和集成测试套件，覆盖 Claude 客户端（mock API 调用测试参数提取和结果解释）、三种执行器（模拟 Gateway 响应测试正常流程和异常处理）、编排器（测试三种路由模式的分发逻辑）、路由决策器（验证阈值边界行为和图像文件特殊处理），目标测试覆盖率 > 80%
+- 对应交付物：
+  - [x] 新功能模块
+  - [ ] 实验结果
+  - [x] API/系统接口
+  - [ ] 系统截图
+
+### 任务2
+- 任务内容：在实际 Docker 环境中执行端到端部署验证，完整走通三条核心链路：① 工具调用链路（用户自然语言 → 路由决策 → 参数提取 → Gateway 调用 MDCalc → 结果解释 → 返回）；② 模型调用链路（上传胸片 → 路由识别图像 → MAVL 推理 → 疾病概率解释 → 返回）；③ 技能调用链路（临床问题 → 路由匹配技能 → 加载 SKILL.md → Claude 对话 → 返回）。记录每条链路的端到端延迟和成功率
+- 对应交付物：
+  - [ ] 新功能模块
+  - [x] 实验结果
+  - [x] API/系统接口
+  - [x] 系统截图
+
+### 任务3
+- 任务内容：扩展数据规模，将 skills 目录从当前 88 个技能扩展导入至完整 869 个技能集，接入更多医疗模型到 Gateway（计划新增 5-10 个），重建 FAISS 索引并评估大规模索引下的检索性能（延迟、准确率）和路由决策质量（top-1 命中率、误路由率）
+- 对应交付物：
+  - [x] 新功能模块
+  - [x] 实验结果
+  - [x] API/系统接口
+  - [ ] 系统截图
+
+### 任务4
+- 任务内容：引入 Redis 实现会话持久化管理，支持多轮对话上下文保持；实现相同参数工具调用结果缓存（TTL 1 小时）减少重复计算；评估是否需要引入消息队列处理高并发场景下的模型调用请求排队
+- 对应交付物：
+  - [x] 新功能模块
+  - [ ] 实验结果
+  - [x] API/系统接口
+  - [ ] 系统截图

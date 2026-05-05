@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+logs/
+
+# FAISS 索引文件（较大，不提交到 Git）
+data/indexes/faiss.index
+data/indexes/metadata.json
+
+# 注册表 JSON（可选：如果从 Gateway 动态导入，可以不提交）
+# data/registry/tools.json
+# data/registry/models.json
+# data/registry/skills.json
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+
+# 测试数据
+tests/fixtures/*.jpg
+tests/fixtures/*.png
+tests/fixtures/*.json
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# 模型缓存（sentence-transformers 下载的模型）
+.cache/
+models/
+
+# Docker
+.dockerignore

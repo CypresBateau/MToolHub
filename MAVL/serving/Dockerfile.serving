@@ -1,0 +1,20 @@
+FROM mavl-fixed:latest
+
+# curl 用于 HEALTHCHECK
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# 安装 FastAPI 服务依赖（cd /tmp 避免 pyproject.toml 干扰）
+COPY serving/requirements-serving.txt /tmp/requirements-serving.txt
+RUN cd /tmp && pip install --no-cache-dir -r requirements-serving.txt \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+WORKDIR /workspace/MAVL
+
+EXPOSE 8000
+
+# 模型加载时间较长，给 120s 启动宽限期
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 单 worker：模型约 400MB+ 显存，多进程各加载一份会 OOM
+CMD ["uvicorn", "serving.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

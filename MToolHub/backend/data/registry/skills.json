@@ -1,0 +1,36 @@
+{
+  "skills": [
+    {
+      "id": "skill_clinical_reports",
+      "name": "Clinical Report Generation",
+      "name_zh": "临床报告生成",
+      "category": "skill",
+      "skill_type": "document_only",
+      "description": "Generates standardized clinical documents including discharge summaries, SOAP notes, consultation notes, and progress notes following medical documentation best practices.",
+      "description_zh": "生成标准化临床文档，包括出院小结、SOAP 笔记、会诊记录和病程记录，遵循医疗文档最佳实践。",
+      "keywords": ["discharge summary", "SOAP", "clinical note", "documentation", "出院小结", "病历", "病程记录"],
+      "skill_md_path": "clinical-reports/SKILL.md",
+      "references_path": null,
+      "handler_path": null,
+      "required_tools": [],
+      "tags": ["documentation", "NLP", "clinical"],
+      "enabled": true
+    },
+    {
+      "id": "skill_care_coordination",
+      "name": "Care Coordination",
+      "name_zh": "护理协调",
+      "category": "skill",
+      "skill_type": "document_only",
+      "description": "Assists with care coordination tasks including patient triage, appointment scheduling, follow-up planning, and communication between healthcare providers.",
+      "description_zh": "协助护理协调任务，包括患者分诊、预约安排、随访计划和医疗提供者之间的沟通。",
+      "keywords": ["care coordination", "triage", "scheduling", "follow-up", "护理协调", "分诊", "随访"],
+      "skill_md_path": "care-coordination/SKILL.md",
+      "references_path": null,
+      "handler_path": null,
+      "required_tools": [],
+      "tags": ["coordination", "workflow", "communication"],
+      "enabled": true
+    }
+  ]
+}

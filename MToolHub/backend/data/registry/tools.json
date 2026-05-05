@@ -1,0 +1,153 @@
+{
+  "tools": [
+    {
+      "id": "tool_mdcalc_wells_dvt",
+      "name": "Wells Score for DVT",
+      "name_zh": "Wells 深静脉血栓评分",
+      "category": "tool",
+      "sub_category": "mdcalc",
+      "gateway_tool_name": "tool-mdcalc",
+      "gateway_interface": "call",
+      "function_name": "wells_score_dvt",
+      "description": "Predicts risk of deep vein thrombosis (DVT) based on clinical criteria including active cancer, paralysis, recent immobilization, localized tenderness, entire leg swelling, calf swelling, pitting edema, and collateral veins.",
+      "description_zh": "根据临床标准预测深静脉血栓（DVT）风险，包括活动性癌症、瘫痪、近期制动、局部压痛、整条腿肿胀、小腿肿胀、凹陷性水肿和侧支静脉。",
+      "keywords": ["DVT", "deep vein thrombosis", "Wells", "血栓", "深静脉血栓"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "active_cancer": {
+            "type": "integer",
+            "description": "Active cancer (treatment within 6 months or palliative)",
+            "enum": [0, 1]
+          },
+          "paralysis": {
+            "type": "integer",
+            "description": "Paralysis, paresis, or recent plaster immobilization",
+            "enum": [0, 1]
+          },
+          "recent_immobilization": {
+            "type": "integer",
+            "description": "Recently bedridden >3 days or major surgery within 12 weeks",
+            "enum": [0, 1]
+          },
+          "localized_tenderness": {
+            "type": "integer",
+            "description": "Localized tenderness along deep venous system",
+            "enum": [0, 1]
+          },
+          "entire_leg_swelling": {
+            "type": "integer",
+            "description": "Entire leg swollen",
+            "enum": [0, 1]
+          },
+          "calf_swelling": {
+            "type": "integer",
+            "description": "Calf swelling >3 cm compared to other leg",
+            "enum": [0, 1]
+          },
+          "pitting_edema": {
+            "type": "integer",
+            "description": "Pitting edema confined to symptomatic leg",
+            "enum": [0, 1]
+          },
+          "collateral_veins": {
+            "type": "integer",
+            "description": "Collateral superficial veins (non-varicose)",
+            "enum": [0, 1]
+          },
+          "alternative_diagnosis": {
+            "type": "integer",
+            "description": "Alternative diagnosis at least as likely as DVT",
+            "enum": [0, 1]
+          }
+        },
+        "required": []
+      },
+      "output_format": "dict_with_interpretation",
+      "tags": ["vascular", "emergency", "risk-assessment"],
+      "enabled": true
+    },
+    {
+      "id": "tool_mdcalc_cha2ds2_vasc",
+      "name": "CHA2DS2-VASc Score",
+      "name_zh": "CHA2DS2-VASc 评分",
+      "category": "tool",
+      "sub_category": "mdcalc",
+      "gateway_tool_name": "tool-mdcalc",
+      "gateway_interface": "call",
+      "function_name": "cha2ds2_vasc_score",
+      "description": "Predicts stroke risk in patients with atrial fibrillation. Used to determine need for anticoagulation therapy.",
+      "description_zh": "预测房颤患者的卒中风险，用于决定是否需要抗凝治疗。",
+      "keywords": ["atrial fibrillation", "stroke", "anticoagulation", "房颤", "卒中", "抗凝"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "age": {
+            "type": "number",
+            "description": "Patient age in years"
+          },
+          "sex": {
+            "type": "string",
+            "description": "Patient sex",
+            "enum": ["male", "female"]
+          },
+          "chf_history": {
+            "type": "boolean",
+            "description": "History of congestive heart failure"
+          },
+          "hypertension": {
+            "type": "boolean",
+            "description": "History of hypertension"
+          },
+          "stroke_tia_history": {
+            "type": "boolean",
+            "description": "History of stroke or TIA"
+          },
+          "vascular_disease": {
+            "type": "boolean",
+            "description": "History of vascular disease"
+          },
+          "diabetes": {
+            "type": "boolean",
+            "description": "History of diabetes"
+          }
+        },
+        "required": ["age", "sex"]
+      },
+      "output_format": "dict_with_interpretation",
+      "tags": ["cardiology", "risk-assessment", "anticoagulation"],
+      "enabled": true
+    },
+    {
+      "id": "tool_unit_glucose",
+      "name": "Glucose Unit Conversion",
+      "name_zh": "血糖单位换算",
+      "category": "tool",
+      "sub_category": "unit",
+      "gateway_tool_name": "tool-unit",
+      "gateway_interface": "call",
+      "function_name": "convert_glucose",
+      "description": "Converts glucose values between mg/dL and mmol/L",
+      "description_zh": "血糖单位换算（mg/dL 与 mmol/L 互转）",
+      "keywords": ["glucose", "blood sugar", "conversion", "血糖", "单位换算"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "description": "Glucose value"
+          },
+          "from_unit": {
+            "type": "string",
+            "description": "Source unit",
+            "enum": ["mg/dL", "mmol/L"]
+          }
+        },
+        "required": ["value", "from_unit"]
+      },
+      "output_format": "string",
+      "tags": ["conversion", "lab", "endocrinology"],
+      "enabled": true
+    }
+  ]
+}

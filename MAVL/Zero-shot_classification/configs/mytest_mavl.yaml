@@ -1,0 +1,26 @@
+test_file: '/workspace/MAVL/my_test/test_labels.csv'
+disease_book: 'observation explanation.json'
+concept_book: '../Pretrain/concept_gen/gpt4_mimic.json'
+
+dataset: 'chexpert'
+root: '/workspace/MAVL/my_test'
+model: 'mavl'
+model_path: '../checkpoints/checkpoint_full_46.pth'
+
+mode: feature
+
+image_res: 224
+test_batch_size: 1
+
+d_model: 256
+base_model: 'resnet50'
+decoder: cross
+num_queries: 75
+dropout: 0.1
+attribute_set_size: 2
+N: 4
+H: 4
+text_encoder: '/root/.cache/huggingface/hub/models--emilyalsentzer--Bio_ClinicalBERT/snapshots/d5892b39a4adaed74b92212a44081509db72f87b'
+self_attention: True
+pretrained: True
+chexpert_subset: True

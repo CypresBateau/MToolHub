@@ -1,0 +1,334 @@
+{
+    "request_id": "91aba092-3f06-4909-893a-1543045fbb77",
+    "filename": "test.jpg",
+    "inference_time_ms": 46.8,
+    "predictions": [
+        {
+            "disease": "normal",
+            "probability": 0.999817
+        },
+        {
+            "disease": "clear",
+            "probability": 0.999703
+        },
+        {
+            "disease": "sharp",
+            "probability": 0.989249
+        },
+        {
+            "disease": "sharply",
+            "probability": 0.904367
+        },
+        {
+            "disease": "unremarkable",
+            "probability": 0.999549
+        },
+        {
+            "disease": "intact",
+            "probability": 0.999756
+        },
+        {
+            "disease": "stable",
+            "probability": 0.99975
+        },
+        {
+            "disease": "free",
+            "probability": 0.994086
+        },
+        {
+            "disease": "effusion",
+            "probability": 0.035711
+        },
+        {
+            "disease": "opacity",
+            "probability": 0.881957
+        },
+        {
+            "disease": "pneumothorax",
+            "probability": 0.002998
+        },
+        {
+            "disease": "edema",
+            "probability": 0.058449
+        },
+        {
+            "disease": "atelectasis",
+            "probability": 0.976088
+        },
+        {
+            "disease": "tube",
+            "probability": 0.118439
+        },
+        {
+            "disease": "consolidation",
+            "probability": 0.028095
+        },
+        {
+            "disease": "process",
+            "probability": 0.001998
+        },
+        {
+            "disease": "abnormality",
+            "probability": 0.027967
+        },
+        {
+            "disease": "enlarge",
+            "probability": 0.911484
+        },
+        {
+            "disease": "tip",
+            "probability": 0.998333
+        },
+        {
+            "disease": "low",
+            "probability": 0.999974
+        },
+        {
+            "disease": "pneumonia",
+            "probability": 0.012758
+        },
+        {
+            "disease": "line",
+            "probability": 0.788569
+        },
+        {
+            "disease": "congestion",
+            "probability": 0.126241
+        },
+        {
+            "disease": "catheter",
+            "probability": 0.629781
+        },
+        {
+            "disease": "cardiomegaly",
+            "probability": 0.994271
+        },
+        {
+            "disease": "fracture",
+            "probability": 0.80788
+        },
+        {
+            "disease": "air",
+            "probability": 0.249103
+        },
+        {
+            "disease": "tortuous",
+            "probability": 0.999944
+        },
+        {
+            "disease": "lead",
+            "probability": 0.983
+        },
+        {
+            "disease": "disease",
+            "probability": 0.063622
+        },
+        {
+            "disease": "calcification",
+            "probability": 0.956439
+        },
+        {
+            "disease": "prominence",
+            "probability": 0.994795
+        },
+        {
+            "disease": "device",
+            "probability": 0.629826
+        },
+        {
+            "disease": "engorgement",
+            "probability": 0.681389
+        },
+        {
+            "disease": "picc",
+            "probability": 0.862042
+        },
+        {
+            "disease": "clip",
+            "probability": 0.996106
+        },
+        {
+            "disease": "elevation",
+            "probability": 0.998432
+        },
+        {
+            "disease": "expand",
+            "probability": 0.999613
+        },
+        {
+            "disease": "nodule",
+            "probability": 0.512292
+        },
+        {
+            "disease": "wire",
+            "probability": 0.956524
+        },
+        {
+            "disease": "fluid",
+            "probability": 0.694634
+        },
+        {
+            "disease": "degenerative",
+            "probability": 0.999589
+        },
+        {
+            "disease": "pacemaker",
+            "probability": 0.654328
+        },
+        {
+            "disease": "thicken",
+            "probability": 0.986243
+        },
+        {
+            "disease": "marking",
+            "probability": 0.965616
+        },
+        {
+            "disease": "scar",
+            "probability": 0.987723
+        },
+        {
+            "disease": "hyperinflate",
+            "probability": 0.9948
+        },
+        {
+            "disease": "blunt",
+            "probability": 0.994639
+        },
+        {
+            "disease": "loss",
+            "probability": 0.985026
+        },
+        {
+            "disease": "widen",
+            "probability": 0.970159
+        },
+        {
+            "disease": "collapse",
+            "probability": 0.652167
+        },
+        {
+            "disease": "density",
+            "probability": 0.976516
+        },
+        {
+            "disease": "emphysema",
+            "probability": 0.855818
+        },
+        {
+            "disease": "aerate",
+            "probability": 0.99829
+        },
+        {
+            "disease": "mass",
+            "probability": 0.359805
+        },
+        {
+            "disease": "crowd",
+            "probability": 0.999431
+        },
+        {
+            "disease": "infiltrate",
+            "probability": 0.048216
+        },
+        {
+            "disease": "obscure",
+            "probability": 0.990924
+        },
+        {
+            "disease": "deformity",
+            "probability": 0.98047
+        },
+        {
+            "disease": "hernia",
+            "probability": 0.981352
+        },
+        {
+            "disease": "drainage",
+            "probability": 0.620518
+        },
+        {
+            "disease": "distention",
+            "probability": 0.924586
+        },
+        {
+            "disease": "shift",
+            "probability": 0.884472
+        },
+        {
+            "disease": "stent",
+            "probability": 0.866406
+        },
+        {
+            "disease": "pressure",
+            "probability": 0.932974
+        },
+        {
+            "disease": "lesion",
+            "probability": 0.498338
+        },
+        {
+            "disease": "finding",
+            "probability": 0.13815
+        },
+        {
+            "disease": "borderline",
+            "probability": 0.999888
+        },
+        {
+            "disease": "hardware",
+            "probability": 0.98946
+        },
+        {
+            "disease": "dilation",
+            "probability": 0.840916
+        },
+        {
+            "disease": "chf",
+            "probability": 0.031799
+        },
+        {
+            "disease": "redistribution",
+            "probability": 0.988214
+        },
+        {
+            "disease": "aspiration",
+            "probability": 0.054962
+        },
+        {
+            "disease": "tail_abnorm_obs",
+            "probability": 0.86839
+        },
+        {
+            "disease": "excluded_obs",
+            "probability": 0.786146
+        }
+    ],
+    "top_k": [
+        {
+            "disease": "low",
+            "probability": 0.999974
+        },
+        {
+            "disease": "tortuous",
+            "probability": 0.999944
+        },
+        {
+            "disease": "borderline",
+            "probability": 0.999888
+        },
+        {
+            "disease": "normal",
+            "probability": 0.999817
+        },
+        {
+            "disease": "intact",
+            "probability": 0.999756
+        }
+    ],
+    "model_info": {
+        "checkpoint": "checkpoint_full_46.pth",
+        "mode": "feature",
+        "device": "cuda"
+    }
+}

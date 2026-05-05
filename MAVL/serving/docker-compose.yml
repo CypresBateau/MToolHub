@@ -1,0 +1,24 @@
+services:
+  mavl-api:
+    build:
+      context: ..                          # 构建上下文为 MAVL/ 目录
+      dockerfile: serving/Dockerfile.serving
+    image: mavl-serving:latest
+    container_name: mavl-api
+    env_file:
+      - .env                               # cp .env.example .env 后填入实际路径
+    ports:
+      - "8000:8000"
+    volumes:
+      - /data/wxb/toolkit/MAVL:/workspace/MAVL          # 代码 + 模型
+      - /home/tx/.cache/huggingface:/root/.cache/huggingface
+      - /home/tx/.cache/torch:/root/.cache/torch
+    shm_size: "4g"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped

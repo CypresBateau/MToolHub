@@ -1,0 +1,9 @@
+name: tool-unit
+type: remote
+endpoint: http://tool-unit:8000
+gpu_memory_mb: 0                    # 纯 CPU，不占 GPU 显存
+load_time_s: 5
+call_timeout_s: 10
+description: "237 个医学单位换算工具（mmol/L ↔ mg/dL 等），JSON 参数输入"
+input: json
+output: conversion

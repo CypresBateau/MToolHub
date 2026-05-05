@@ -1,0 +1,5 @@
+# 占位文件
+
+此文件确保 `data/indexes/` 目录被 Git 跟踪。
+
+实际的索引文件（`faiss.index` 和 `metadata.json`）将在运行 `python scripts/build_index.py` 后生成。

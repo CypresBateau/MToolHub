@@ -1,0 +1,16 @@
+FROM mavl:latest
+
+# 修复系统库缺失
+RUN apt-get update && apt-get install -y \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 修复 Python 依赖版本冲突
+RUN cd /tmp && pip install \
+    "wandb==0.13.11" \
+    "opencv-python==4.2.0.32" \
+    "transformers==4.16.0" \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple
+
