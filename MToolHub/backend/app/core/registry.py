@@ -42,9 +42,22 @@ class RegistryManager:
 
         with open(tools_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            registry = ToolsRegistry(**data)
-            self.tools = [tool for tool in registry.tools if tool.enabled]
 
+        # 兼容两种格式：JSON 数组 或 {"tools": [...]}
+        if isinstance(data, list):
+            items = data
+        else:
+            items = data.get("tools", [])
+
+        loaded = []
+        for item in items:
+            try:
+                tool = ToolMetadata(**item)
+                if tool.enabled:
+                    loaded.append(tool)
+            except Exception as e:
+                print(f"  跳过工具（字段不匹配）：{item.get('id', item.get('resource_id', '?'))} — {e}")
+        self.tools = loaded
         print(f"已加载 {len(self.tools)} 个工具")
 
     def _load_models(self):

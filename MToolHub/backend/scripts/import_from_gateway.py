@@ -44,33 +44,37 @@ async def fetch_tool_functions(endpoint: str) -> List[Dict[str, Any]]:
 
 
 def parse_tool_metadata(name: str, info: Dict[str, Any], functions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """解析工具元数据为注册表格式"""
-    # 确定类别
+    """解析工具元数据为 ToolMetadata 兼容格式"""
     if "mdcalc" in name:
-        category = "mdcalc"
+        sub_category = "mdcalc"
     elif "unit" in name:
-        category = "unit"
+        sub_category = "unit"
     elif "scale" in name:
-        category = "scale"
+        sub_category = "scale"
     else:
-        category = "other"
+        sub_category = "other"
 
     tools = []
     for func in functions:
-        resource_id = f"{name}:{func['function_name']}"
+        function_name = func["function_name"]
+        # id 格式：tool-mdcalc:wells_score_dvt
+        tool_id = f"{name}:{function_name}"
         tool = {
-            "resource_id": resource_id,
-            "resource_type": "tool",
-            "name": func.get("tool_name", func["function_name"]),
-            "name_zh": None,
-            "description": func.get("short_description", ""),
-            "description_zh": None,
-            "keywords": [],
-            "category": category,
-            "function_name": func["function_name"],
-            "parameters": [],   # 详细参数需要调用 /api/v1/tools/{function_name}
+            "id": tool_id,
+            "name": func.get("tool_name", function_name),
+            "name_zh": func.get("tool_name_zh"),
+            "category": "tool",
+            "sub_category": sub_category,
             "gateway_tool_name": name,
-            "endpoint": info.get("endpoint", "")
+            "gateway_interface": "call",
+            "function_name": function_name,
+            "description": func.get("short_description", func.get("description", "")),
+            "description_zh": func.get("short_description_zh"),
+            "keywords": func.get("keywords", []),
+            "input_schema": func.get("input_schema", {}),
+            "output_format": func.get("output_format", "json"),
+            "tags": func.get("tags", []),
+            "enabled": True,
         }
         tools.append(tool)
 
@@ -78,20 +82,24 @@ def parse_tool_metadata(name: str, info: Dict[str, Any], functions: List[Dict[st
 
 
 def parse_model_metadata(name: str, info: Dict[str, Any]) -> Dict[str, Any]:
-    """解析模型元数据为注册表格式"""
+    """解析模型元数据为 ModelMetadata 兼容格式"""
     return {
-        "resource_id": f"model:{name}",
-        "resource_type": "model",
+        "id": f"model:{name}",
         "name": info.get("description", name),
         "name_zh": info.get("description_zh"),
+        "category": "model",
+        "sub_category": "image_analysis",
+        "gateway_tool_name": name,
+        "gateway_interface": "predict",
         "description": info.get("description", ""),
         "description_zh": info.get("description_zh"),
         "keywords": info.get("keywords", []),
         "input_type": info.get("input", "image"),
-        "output_type": info.get("output", "json"),
-        "gateway_tool_name": name,
-        "endpoint": f"http://{name}:8000",
-        "gpu_memory_mb": info.get("gpu_memory_mb", 0)
+        "accepted_formats": ["jpg", "jpeg", "png", "dcm"],
+        "output_format": info.get("output", "json"),
+        "parameters": {},
+        "tags": [],
+        "enabled": True,
     }
 
 
