@@ -90,7 +90,7 @@ def parse_model_metadata(name: str, info: Dict[str, Any]) -> Dict[str, Any]:
         "input_type": info.get("input", "image"),
         "output_type": info.get("output", "json"),
         "gateway_tool_name": name,
-        "endpoint": info.get("endpoint", ""),
+        "endpoint": f"http://{name}:8000",
         "gpu_memory_mb": info.get("gpu_memory_mb", 0)
     }
 
@@ -120,7 +120,7 @@ async def import_from_gateway(gateway_url: str, output_dir: str):
         if info.get("type") == "remote":
             if info.get("input") == "json":
                 # 这是工具（MDCalc / Unit / Scale）
-                endpoint = info.get("endpoint", "")
+                endpoint = f"http://{name}:8000"
                 functions = await fetch_tool_functions(endpoint)
                 if functions:
                     tools = parse_tool_metadata(name, info, functions)
