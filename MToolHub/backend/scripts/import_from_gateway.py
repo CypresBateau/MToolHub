@@ -30,19 +30,20 @@ async def fetch_gateway_tools(gateway_url: str) -> Dict[str, Any]:
             return {}
 
 
-async def fetch_tool_detail(gateway_url: str, tool_name: str) -> Dict[str, Any]:
-    """获取单个工具的详细信息"""
+async def fetch_tool_functions(endpoint: str) -> List[Dict[str, Any]]:
+    """直接调用工具容器的 /api/v1/tools 接口获取函数列表"""
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            resp = await client.get(f"{gateway_url}/tools/{tool_name}/info")
+            resp = await client.get(f"{endpoint}/api/v1/tools")
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            return data.get("tools", [])
         except Exception as e:
-            print(f"⚠️  无法获取 {tool_name} 详情: {e}")
-            return {}
+            print(f"⚠️  无法获取工具函数列表: {e}")
+            return []
 
 
-def parse_tool_metadata(name: str, info: Dict[str, Any], detail: Dict[str, Any]) -> Dict[str, Any]:
+def parse_tool_metadata(name: str, info: Dict[str, Any], functions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """解析工具元数据为注册表格式"""
     # 确定类别
     if "mdcalc" in name:
@@ -54,18 +55,6 @@ def parse_tool_metadata(name: str, info: Dict[str, Any], detail: Dict[str, Any])
     else:
         category = "other"
 
-    # 从 detail 中提取函数列表（如果有多个函数）
-    functions = detail.get("functions", [])
-    if not functions and "function_name" in detail:
-        # 单函数工具
-        functions = [{
-            "function_name": detail["function_name"],
-            "tool_name": detail.get("tool_name", name),
-            "description": detail.get("description", ""),
-            "parameters": detail.get("parameters", [])
-        }]
-
-    # 为每个函数生成一个资源条目
     tools = []
     for func in functions:
         resource_id = f"{name}:{func['function_name']}"
@@ -73,13 +62,13 @@ def parse_tool_metadata(name: str, info: Dict[str, Any], detail: Dict[str, Any])
             "resource_id": resource_id,
             "resource_type": "tool",
             "name": func.get("tool_name", func["function_name"]),
-            "name_zh": func.get("tool_name_zh"),
-            "description": func.get("description", ""),
-            "description_zh": func.get("description_zh"),
-            "keywords": func.get("keywords", []),
+            "name_zh": None,
+            "description": func.get("short_description", ""),
+            "description_zh": None,
+            "keywords": [],
             "category": category,
             "function_name": func["function_name"],
-            "parameters": func.get("parameters", []),
+            "parameters": [],   # 详细参数需要调用 /api/v1/tools/{function_name}
             "gateway_tool_name": name,
             "endpoint": info.get("endpoint", "")
         }
@@ -131,9 +120,10 @@ async def import_from_gateway(gateway_url: str, output_dir: str):
         if info.get("type") == "remote":
             if info.get("input") == "json":
                 # 这是工具（MDCalc / Unit / Scale）
-                detail = await fetch_tool_detail(gateway_url, name)
-                if detail:
-                    tools = parse_tool_metadata(name, info, detail)
+                endpoint = info.get("endpoint", "")
+                functions = await fetch_tool_functions(endpoint)
+                if functions:
+                    tools = parse_tool_metadata(name, info, functions)
                     all_tools.extend(tools)
                     print(f"   ✅ 导入 {len(tools)} 个函数")
 
